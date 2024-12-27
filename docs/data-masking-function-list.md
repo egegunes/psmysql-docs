@@ -2,8 +2,27 @@
 
 The feature is in [tech preview](glossary.md#tech-preview).
 
-| **Name**                                          | **Usage**                                             |
+## Permissions
+
+In Percona Server for MySQL 8.0.41, dictionary-related functions no longer run internal queries as the root user without a password. Following MySQL best practices, many admins disable the `root` user, which previously caused these functions to stop working. The server now uses the built-in `mysql.session` user to execute dictionary queries. 
+
+However, for this to work, you need to grant the mysql.session user `SELECT`, `INSERT`, `UPDATE`, and `DELETE` privileges on the `masking_dictionaries` table.
+
+```{.bash data-prompt="mysql>"}
+mysql> GRANT SELECT, INSERT, UPDATE, DELETE ON mysql.masking_dictionaries TO 'mysql.session'@'localhost';
+```
+
+If you change the value of the `component_masking_functions.masking_database()` system variable to something other than `mysql`, make sure to update the `GRANT` query to match the new value.
+
+```{.bash data-prompt="mysql>"}
+mysql> GRANT SELECT, INSERT, UPDATE, DELETE ON <component_masking_functions.masking_database>.masking_dictionaries TO 'mysql.session'@'localhost';
+```
+
+## Data masking component functions
+
+| **Name**                                          | **Details**                                             |
 |---------------------------------------------------|-------------------------------------------------------|
+| [`dictionaries_flush_interval_seconds (integer, unsigned)`](#dictionaries_flush_interval_secondsinteger-unsigned) | The number of seconds between updates to the internal dictionary cache to match changes in the dictionaries table.|
 | [`gen_blocklist(str, from_dictionary_name, to_dictionary_name)`](#gen_blockliststr-from_dictionary_name-to_dictionary_name) | Replace a term from a dictionary                      |
 | [`gen_dictionary(dictionary_name)`](#gen_dictionarydictionary_name) | Returns a random term from a dictionary               |
 | [`gen_range(lower, upper)`](#gen_rangelower-upper) | Returns a number from a range                       |
@@ -24,13 +43,37 @@ The feature is in [tech preview](glossary.md#tech-preview).
 | [`mask_ssn(str [,mask_char])`](#mask_ssnstr-mask_char)    | Masks the US Social Security number                   |
 | [`mask_uk_nin(str [,mask_char])`](#mask_uk_ninstr-mask_char)     | Masks the United Kingdom National Insurance number    |
 | [`mask_uuid(str [,mask_char])`](#mask_uuidstr-mask_char)         | Masks the Universally Unique Identifier               |
+| [`masking_dictionaries(str)`](#masking_dictionariesstr) | Set a different database name to use for the dictionaries table. |
+| [`masking_dictionaries_flush()`](#masking_dictionaries_flush) | Resyncs the internal dictionary term cache |
 | [`masking_dictionary_remove(dictionary_name)`](#masking_dictionary_removedictionary_name)          | Removes the dictionary                                |
 | [`masking_dictionary_term_add(dictionary_name, term_name)`](#masking_dictionary_term_adddictionary_name-term_name)     | Adds a term to the masking dictionary                 |
 | [`masking_dictionary_term_remove(dictionary_name, term_name)`](#masking_dictionary_term_removedictionary_name-term_name)      | Removes a term from the masking dictionary            |
 
+
+## dictionaries_flush_interval_seconds(integer, unsigned)
+
+The number of seconds between a synchronization between the dictionaries table and the internal dictionary cache.
+
+This variable is read-only. Its default value is 0, which means the synchronization operation does not run. 
+
+## Version update
+
+Percona Server for MySQL 8.0.41 adds this variable.
+
+### Parameters
+
+| Parameter | Optional | Description | Type |
+| --- | --- | --- | --- |
+| `seconds` | Yes | The number of seconds between a synchronization of the dictionary internal cache and dictionaries table.  | Integer, unsigned |
+
+
 ## gen_blocklist(str, from_dictionary_name, to_dictionary_name)
 
 Replaces a term from one dictionary with a randomly selected term in another dictionary.
+
+### Version update
+  
+Percona Server for MySQL 8.0.41 introduces an internal term cache. The server now uses in-memory data structures for lookups instead of querying the `mysql.masking_dictionaries` table every time. This improvement boosts performance, especially when handling multiple rows.
 
 ### Parameters
 
@@ -65,6 +108,10 @@ mysql> SELECT gen_blocklist('apple', 'fruit', 'nut');
 ## gen_dictionary(dictionary_name)
 
 Returns a term from a dictionary selected at random.
+
+### Version update
+  
+Percona Server for MySQL 8.0.41 introduces an internal term cache. The server now uses in-memory data structures for lookups instead of querying the `mysql.masking_dictionaries` table every time. This improvement boosts performance, especially when handling multiple rows.
 
 ### Parameters
 
@@ -760,6 +807,45 @@ mysql> SELECT mask_uuid('9a3b642c-06c6-11ee-be56-0242ac120002');
     +-------------------------------------------------------+
     ```
 
+## masking_database(string)
+
+Specify the name of the database that holds the `dictionaries` table. By default, it uses the `mysql` database.
+
+### Parameters
+
+Name of the database as a string.
+
+### Returns
+
+Returns a string value of `1` (one) when successful.
+
+## masking_dictionaries_flush()
+
+Resyncs the internal dictionary term cache.
+
+### Parameters
+
+None
+
+### Returns
+
+Returns a string value of `1` (one) when successful.
+
+### Example
+
+```{.bash data-prompt="mysql>"}
+mysql> SELECT masking_dictionaries_flush();
+```
+??? example "Expected output"
+
+    ```{.text .no-copy}
+    +------------------------------+
+    | masking_dictionaries_flush() |
+    +------------------------------+
+    |                          1   |
+    +----------------------------  +
+    ```
+    
 ## masking_dictionary_remove(dictionary_name)
 
 Removes all of the terms and then removes the dictionary. 
